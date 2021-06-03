@@ -1,0 +1,157 @@
+---
+title: 'Exploratory Visualization of Forest Fire Data'
+author: "Eda AYDIN"
+date: "03 04 2021"
+output:
+  pdf_document:
+    toc: yes
+---
+
+# Exploring Data Through Visualization: Independent Investigations
+
+Load the package and we'll need for the project
+
+```{r}
+library(tidyverse)
+
+forest_fires <- read_csv("forestfires.csv")
+```
+
+# The Importance of Forest Fire Data
+```{r}
+# What columns are in the dataset?
+
+colnames(forest_fires)
+```
+
+We know that the columns correspond to the following information:
+
+* **X**: X-axis spatial coordinate within the Montesinho park map: 1 to 9
+* **Y**: Y-axis spatial coordinate within the Montesinho park map: 2 to 9
+* **month**: Month of the year: 'jan' to 'dec'
+* **day**: Day of the week: 'mon' to 'sun'
+* **FFMC**: Fine Fuel Moisture Code index from the FWI system: 18.7 to 96.20
+* **DMC**: Duff Moisture Code index from the FWI system: 1.1 to 291.3
+* **DC**: Drought Code index from the FWI system: 7.9 to 860.6
+* **ISI**: Initial Spread Index from the FWI system: 0.0 to 56.10
+* **temp**: Temperature in Celsius degrees: 2.2 to 33.30
+* **RH**: Relative humidity in percentage: 15.0 to 100
+* **wind**: Wind speed in km/h: 0.40 to 9.40
+* **rain**: Outside rain in mm/m2 : 0.0 to 6.4
+* **area**: The burned area of the forest (in ha): 0.00 to 1090.84
+
+A single row corresponds to the location of a fire and some characteristics about the fire itself
+Higher water presence is typically associated with less fire spread, so we might expect the water-related variables ("DMC" and "rain") to be related with "area".
+
+# Data Processing
+```{r}
+# Convert the month variable into a categorical variable
+
+month_order <- c("jan", "feb", "mar",
+                 "apr", "may", "jun",
+                 "jul", "aug", "sep",
+                 "oct", "nov", "dec")
+
+# convert the day variable into a categorical variable
+
+day_order <- c("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+```
+
+```{r}
+forest_fires <- forest_fires %>%
+  mutate(
+    month = factor(month, levels= month_order),
+    day = factor(day, levels= day_order)
+  )
+```
+
+# When Do Most Forest Fires Occur?
+
+```{r}
+# Which months do forest fires happen the most?
+
+fires_by_month <- forest_fires %>%
+  group_by(month) %>%
+  summarize(total_fires = n())
+
+fires_by_month %>%
+  ggplot(aes(x=month, y=total_fires)) + 
+  geom_col() + 
+  labs(
+    title = "Number of forest fires in data by month",
+    x = "Month",
+    y = "Fire count"
+  )
+```
+
+```{r}
+# Which days of the week do forest fires happen the most?
+
+fires_by_day <- forest_fires %>%
+  group_by(day) %>%
+  summarize(total_fires = n())
+
+fires_by_day %>%
+  ggplot(aes(x = day, y= total_fires)) + 
+  geom_col() +
+  labs(
+    title= "Number of forest in data by day of the week",
+    x = "Day of the week",
+    y = "Fire count"
+  )
+
+```
+
+# Plotting Other Variables Against Time
+```{r}
+forest_fires_long <- forest_fires %>%
+  pivot_longer(
+    cols = c("FFMC", "DMC", "DC", "ISI", "temp", "RH", "wind", "rain"),
+    names_to = "data_col",
+    values_to = "value"
+  )
+
+forest_fires_long %>%
+  ggplot(aes(x = month, y = value)) + 
+  geom_boxplot() + 
+  facet_wrap(vars(data_col), scale = "free_y") + 
+  labs(
+    title= "Variable changes over month",
+    x = "Month",
+    y = "Variable value"
+  )
+```
+
+# Examining Forest Fire Severity
+
+We're trying to see how each of the variables in the dataset relate to "area". We can leverage the long format version of the data we created to use with "facet_wrap()".
+
+```{r}
+forest_fires_long %>%
+  ggplot(aes(x=value, y=area)) +
+  geom_point() + 
+  facet_wrap(vars(data_col), scales = "free_x") + 
+  labs(
+    title = "Relationships between other variables and area burned",
+    x = "Value of column",
+    y = "Area burned (hectare)"
+  )            
+```
+
+# Outlier Problems
+
+It seems that there are two rows where "area" that still hurt the scale of the visualization. Let's make a similar visualization that excludes these observations so that we can better see how each variabe relates to "area".
+```{r}
+forest_fires_long %>%
+  filter (area <300) %>%
+  ggplot(aes(x = value, y = area)) + 
+  geom_point() + 
+  facet_wrap(vars(data_col), scales = "free_x") + 
+  labs(
+    title = "Relationships between other variables and area burned (area < 300)",
+    x = "Value of column",
+    y = "Area burned (hectare)"
+  )
+```
+
+
