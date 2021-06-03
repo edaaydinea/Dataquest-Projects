@@ -1,0 +1,138 @@
+---
+title: 'Creating An Efficient Data Analysis Workflow : Book Sales Review'
+author: "Eda AYDIN"
+date: "28 03 2021"
+output:
+  pdf_document:
+    toc: yes
+---
+
+# Upload necesessary libraries
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+# Data Preparation
+```{r}
+sales <- read_csv("sales2019.csv")
+```
+# Data Exploration
+```{r}
+# How big is the dataset? 
+dim(sales)
+```
+```{r}
+# What are the column names? What do they seem to represent?
+colnames(sales)
+```
+The "date" column shows the data that the order of books was made.
+
+```{r}
+# What are the types of each of the columns?
+for (col in colnames(sales)) {
+  paste0(col, ":", typeof(sales[[col]])) %>% print
+}
+```
+```{r}
+# Do any of the columns have missing data?
+for (col in colnames(sales)) {
+  paste0(col, ", numbers of missing dara rows:",
+          is.na(sales[[col]]) %>% sum) %>% print
+}
+```
+The `user_submitted_review` column has some missing data in it. 
+
+# Handling Missing Data
+```{r}
+# Remove the rows with no user_submitted_review
+complete_sales <- sales %>%
+  filter(
+    !is.na(user_submitted_review)
+  )
+complete_sales
+```
+```{r}
+# Calculate the mean of the total_purchased column, without the missing values
+
+purchase_mean <- complete_sales %>%
+  filter (!is.na(total_purchased)) %>%
+  pull (total_purchased) %>%
+  mean
+purchase_mean
+```
+```{r}
+# Assign this mean to all of the rows where total_purchased was NA
+complete_sales <- complete_sales %>%
+  mutate(
+    imputed_purchased = if_else(is.na(total_purchased),
+                                purchase_mean,
+                                total_purchased)
+  )
+complete_sales
+```
+# Processing Review Data
+```{r}
+# Examine the unique sentences that are present in user_submitted_review
+
+complete_sales %>% pull(user_submitted_review) %>% unique
+```
+```{r}
+is_positive <- function(review) {
+  review_positive = case_when(
+    str_detect(review, "Awesome!") ~TRUE,
+    str_detect(review, "Ok") ~ TRUE,
+    str_detect(review, "a lot") ~TRUE,
+    str_detect(review, "okay") ~ TRUE,
+    str_detect(review, "Never") ~ TRUE,
+    TRUE ~ FALSE # The review did not contain any of the above phrases
+  )
+}
+```
+
+```{r}
+complete_sales <- complete_sales %>% 
+  mutate(
+    is_positive = unlist(map(user_submitted_review, is_positive))
+  )
+```
+
+# Comparing Book Sales Between Pre- and Post- Program Sales
+```{r}
+complete_sales <- complete_sales %>%
+  mutate (
+    date_status = if_else(mdy(date) < ymd("2019/07/01"), "Pre", "Post")
+  )
+```
+
+```{r}
+complete_sales %>%
+  group_by(date_status,title) %>%
+  summarize(
+    books_purchased = sum(imputed_purchased)
+  ) %>%
+  arrange(title, date_status)
+```
+
+# Comparing Book Sales Within Customer Type
+```{r}
+complete_sales %>%
+  group_by(date_status, customer_type) %>%
+  summarize (
+    books_purchased = sum(imputed_purchased)
+  ) %>%
+  arrange(customer_type, date_status)
+```
+
+# Comparing Review Sentiment Between Pre- and Post-Program Sales
+```{r}
+# Create another summary table that compares the number of positive 
+# reviews before and after July 1, 2019
+complete_sales %>%
+  group_by(date_status) %>%
+  summarize(
+    num_positive_reviews = sum(is_positive)
+  )
+```
+
+
