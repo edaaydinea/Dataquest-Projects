@@ -1,0 +1,183 @@
+---
+title: "New York Solar Resource Data"
+author: "Eda AYDIN"
+date: "13 05 2021"
+output:
+  pdf_document:
+    toc: yes
+---
+
+# Introduction
+
+Using APIs gives use access to incredible amount of data only available online. In this exercise, we want to extract New York City Solar Data.
+Such data can, allow us to determine on average the most productive periods of the year for solar panel deployment.
+
+# Finding the Suitable Endpoint and Parameters to Query the API
+```{r}
+# Storing my api key in a variable
+the_key  = "S2uaBTmPv1jAZdoZuh8kKzavKXsvKsjN4bQLB73r"
+
+# Identify the API url
+url <- "https://developer.nrel.gov/api/solar/solar_resource/v1.json"
+
+# Specifying the necessary parameters to request the New York City solar data
+parameters_list <- list(api_key= the_key, lat = 41, lon = -75)
+```
+
+# Extracting the New York Solar Resource Data
+```{r}
+# Loading the `httr` package
+library(httr)
+
+# Using the `GET()` function to request the data from the API with `url` and `parameters_list`
+response <- GET(url, query = parameters_list)
+
+# Tracking errors 
+## Displaying the status code with the `status_code()` function
+status <- status_code(response)
+status
+
+## Displaying the API response format
+response_type <- http_type(response)
+response_type
+
+# Extracting the API response content as text
+content <- content(response, "text")
+
+# Displaying this content to check how it looks visually.
+print(content)
+```
+
+# Parsing the JSON into  R Object
+```{r}
+# Parsing the "json_text" to a R object using the "jsonlite::fromJSON()" function
+json_lists <- jsonlite::fromJSON(content)
+
+# Displaying the structure of the R object using the "str()" function
+str(json_lists)
+```
+
+# How to Create a Dataframe from a Complex List
+
+# Building Dataframe from a Complex List
+
+```{r}
+# Extracting the outputs data
+outputs_list <- json_lists$outputs
+
+# Extracting the monthly vector ("monthly") from the ("avg_dni") list in the outputs data
+avg_dni <- outputs_list$avg_dni$monthly
+
+# Extracting the monthly vector ("monthly") fron the ("avg_ghi") list in the outputs data
+avg_ghi <- outputs_list$avg_ghi$monthly
+
+# Extracting the monthly vector ("monthly") from the ("avg_lat_tilt") list in the outputs data
+avg_lat_tilt <- outputs_list$avg_lat_tilt$monthly
+
+# Combining the monthly vectors into a dataframe using the "tibble::tibble()" function 
+## Adding the "month" column containing month abbreviations: "Jan","Feb", ... "Dec"
+dataframe <- tibble::tibble("month" = month.abb,
+                            "avg_dni" = avg_dni,
+                            "avg_ghi" = avg_ghi,
+                            "avg_lat_tilt" = avg_lat_tilt)
+
+# Dipslaying the dataframe
+dataframe
+```
+
+# Extracting Dataframe from a Complex List:
+```{r}
+# Extracting the outputs list
+outputs_list <- json_lists$outputs
+
+# Simplifying the outputs list
+simplified_outputs_list <- unlist(outputs_list)
+
+# Restructuring the simplified list into a matrix of 13 rows (the annual value and 12 months values)
+data_matrix <- matrix(data = simplified_outputs_list,
+                      nrow= 13)
+
+# Removing the annual value from the data matrix
+data_matrix <- data_matrix[-1,]
+
+# Converting the matrix into a dataframe using the as.data.frame()
+another_dataframe <- as.data.frame(data_matrix)
+
+# Displaying the dataframe
+another_dataframe
+```
+
+# Putting all together
+```{r}
+library(httr)
+library(dplyr)
+
+the_key = "S2uaBTmPv1jAZdoZuh8kKzavKXsvKsjN4bQLB73r"
+
+# Creating the custom "nrel_api_json_get_df()" function.
+
+nrel_api_json_get_df <- function(endpoint, queries= list()){
+  
+  # Preparing the URL
+  url <- modify_url("https://developer.nrel.gov", path = endpoint)
+  
+  # API requests
+  response <- GET(url, query = queries)
+  
+  # Tracking errors
+  if (http_error(response)) {
+    print(status_code(response))
+    print(http_status(response))
+    stop("Something went wrong", call. = FALSE)
+  }
+  
+  if(http_type(response) != "application/json"){
+    stop("API did not return json", call. = FALSE)
+  }
+  
+  # Extracting content
+  json_text <- content(response, "text")
+  
+  # Converting content into Dataframe
+  table_lst <- jsonlite::fromJSON(json_text)
+  
+  dataframe <- tibble::tibble("month" = month.abb,
+                              "avg_dni" = as.numeric(table_lst$outputs$avg_dni$monthly),
+                              "avg_ghi" = as.numeric(table_lst$outputs$avg_ghi$monthly),
+                              "avg_lat_tilt" = as.numeric(table_lst$outputs$avg_lat_tilt$monthly))
+  
+  # Returning the dataframe
+  dataframe
+}
+
+# Providing the "api/solar/solar_resource/v1.json" as the endpoint parameter
+# Providing the parameters_list variable as queries parameter
+solar_resource_df <- nrel_api_json_get_df("api/solar/solar_resource/v1.json", parameters_list)
+
+# Printing the output dataframe
+solar_resource_df
+```
+
+# Visualizing New York City Solar Resource Data
+```{r}
+# Loading the ggplot2 and dplyr packages
+library(ggplot2)
+library(dplyr)
+
+# Using the ggplot() function to plot the avg_dni from solar_resource_df
+ggplot(data= solar_resource_df,
+      aes(x = month,
+          y = avg_dni,
+          group = 1)) + geom_line() + geom_point() + theme_bw()
+
+# Converting the "month" column into a factor using the following command
+solar_resource_df <- solar_resource_df %>% 
+  mutate(month = factor(month, levels = month.abb))
+
+# Replotting the "avg_dni" value for each month
+ggplot(data= solar_resource_df,
+       aes(x = month,
+           y = avg_dni,
+           group = 1)) + geom_line() + geom_point() + theme_bw()
+```
+
